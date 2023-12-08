@@ -50,3 +50,8 @@ if self.slow:
 else:
     return await self._send_multiple_commands(OPEN_KEYS)
 ```
+
+# Credits
+
+- Thanks to the work by @the-ress who did the work to identify the necessary data for the slow mode: https://github.com/the-ress/pySwitchbot/tree/curtain-speed 
+- Also thanks to the original repository from Danielhiversen: https://github.com/Danielhiversen/pySwitchbot
