@@ -8,30 +8,22 @@ from .device import REQ_HEADER, SwitchbotDevice, update_after_operation
 
 # Curtain keys
 CURTAIN_COMMAND = "4501"
-FILE_SPEED_IDENTIFIER = "/config/custom_components/switchbot/.slow"
+FILE_SPEED_IDENTIFIER = "/config/custom_components/.slow"
+# For second element of open and close arrs we should add two bytes i.e. ff00
+# First byte [ff] stands for speed (00 or ff - normal, 01 - slow) *
+# * Only for curtains 3. For other models use ff
+# Second byte [00] is a command (00 - open, 64 - close)
 OPEN_KEYS = [
     f"{REQ_HEADER}{CURTAIN_COMMAND}010100",
-    f"{REQ_HEADER}{CURTAIN_COMMAND}05ff00",
-]
-OPEN_KEYS_SLOW = [
-    f"{REQ_HEADER}{CURTAIN_COMMAND}010100",
-    f"{REQ_HEADER}{CURTAIN_COMMAND}050100",
+    f"{REQ_HEADER}{CURTAIN_COMMAND}05",  # +speed + "00"
 ]
 CLOSE_KEYS = [
     f"{REQ_HEADER}{CURTAIN_COMMAND}010164",
-    f"{REQ_HEADER}{CURTAIN_COMMAND}05ff64",
-]
-CLOSE_KEYS_SLOW = [
-    f"{REQ_HEADER}{CURTAIN_COMMAND}010164",
-    f"{REQ_HEADER}{CURTAIN_COMMAND}050164",
+    f"{REQ_HEADER}{CURTAIN_COMMAND}05",  # +speed + "64"
 ]
 POSITION_KEYS = [
     f"{REQ_HEADER}{CURTAIN_COMMAND}0101",
-    f"{REQ_HEADER}{CURTAIN_COMMAND}05ff",
-]  # +actual_position
-POSITION_KEYS_SLOW = [
-    f"{REQ_HEADER}{CURTAIN_COMMAND}0101",
-    f"{REQ_HEADER}{CURTAIN_COMMAND}0501",
+    f"{REQ_HEADER}{CURTAIN_COMMAND}05",  # +speed
 ]  # +actual_position
 STOP_KEYS = [f"{REQ_HEADER}{CURTAIN_COMMAND}0001", f"{REQ_HEADER}{CURTAIN_COMMAND}00ff"]
 
@@ -79,27 +71,25 @@ class SwitchbotCurtain(SwitchbotDevice):
         with open(FILE_SPEED_IDENTIFIER, "r") as fr:
             r = int(fr.read().strip())
             if r == 1:
-                self.slow = 1
+                return 1
             else:
-                self.slow = 0
+                return 255
 
     @update_after_operation
-    async def open(self) -> bool:
-        """Send open command."""
-        self.readState()
-        if self.slow:
-            return await self._send_multiple_commands(OPEN_KEYS_SLOW)
-        else:
-            return await self._send_multiple_commands(OPEN_KEYS)
+    async def open(self, speed: int = 255) -> bool:
+        """Send open command. Speed 255 - normal, 1 - slow"""
+        speed = self.readState()
+        return await self._send_multiple_commands(
+            [OPEN_KEYS[0], f"{OPEN_KEYS[1]}{speed:02X}00"]
+        )
 
     @update_after_operation
-    async def close(self) -> bool:
-        """Send close command."""
-        self.readState()
-        if self.slow:
-            return await self._send_multiple_commands(CLOSE_KEYS_SLOW)
-        else:
-            return await self._send_multiple_commands(CLOSE_KEYS)
+    async def close(self, speed: int = 255) -> bool:
+        """Send close command. Speed 255 - normal, 1 - slow"""
+        speed = self.readState()
+        return await self._send_multiple_commands(
+            [CLOSE_KEYS[0], f"{CLOSE_KEYS[1]}{speed:02X}64"]
+        )
 
     @update_after_operation
     async def stop(self) -> bool:
@@ -107,19 +97,16 @@ class SwitchbotCurtain(SwitchbotDevice):
         return await self._send_multiple_commands(STOP_KEYS)
 
     @update_after_operation
-    async def set_position(self, position: int) -> bool:
-        """Send position command (0-100) to device."""
+    async def set_position(self, position: int, speed: int = 255) -> bool:
+        """Send position command (0-100) to device. Speed 255 - normal, 1 - slow"""
+        speed = self.readState()
         position = (100 - position) if self._reverse else position
-        hex_position = "%0.2X" % position
-        self.readState()
-        if self.slow:
-            return await self._send_multiple_commands(
-                [key + hex_position for key in POSITION_KEYS_SLOW]
-            )
-        else:
-            return await self._send_multiple_commands(
-                [key + hex_position for key in POSITION_KEYS]
-            )
+        return await self._send_multiple_commands(
+            [
+                f"{POSITION_KEYS[0]}{position:02X}",
+                f"{POSITION_KEYS[1]}{speed:02X}{position:02X}",
+            ]
+        )
 
     def get_position(self) -> Any:
         """Return cached position (0-100) of Curtain."""
