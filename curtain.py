@@ -4,11 +4,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from switchbot.models import SwitchBotAdvertisement
+
 from .device import REQ_HEADER, SwitchbotDevice, update_after_operation
 
 # Curtain keys
 CURTAIN_COMMAND = "4501"
-FILE_SPEED_IDENTIFIER = "/config/custom_components/.slow"
+
 # For second element of open and close arrs we should add two bytes i.e. ff00
 # First byte [ff] stands for speed (00 or ff - normal, 01 - slow) *
 # * Only for curtains 3. For other models use ff
@@ -54,6 +56,18 @@ class SwitchbotCurtain(SwitchbotDevice):
         self._settings: dict[str, Any] = {}
         self.ext_info_sum: dict[str, Any] = {}
         self.ext_info_adv: dict[str, Any] = {}
+        self._is_opening: bool = False
+        self._is_closing: bool = False
+
+    def _set_parsed_data(
+        self, advertisement: SwitchBotAdvertisement, data: dict[str, Any]
+    ) -> None:
+        """Set data."""
+        in_motion = data["inMotion"]
+        previous_position = self._get_adv_value("position")
+        new_position = data["position"]
+        self._update_motion_direction(in_motion, previous_position, new_position)
+        super()._set_parsed_data(advertisement, data)
 
     async def _send_multiple_commands(self, keys: list[str]) -> bool:
         """Send multiple commands to device.
@@ -66,8 +80,8 @@ class SwitchbotCurtain(SwitchbotDevice):
             result = await self._send_command(key)
             final_result |= self._check_command_result(result, 0, {1})
         return final_result
-
-    def readState(self):
+	
+	def readState(self):
         with open(FILE_SPEED_IDENTIFIER, "r") as fr:
             r = int(fr.read().strip())
             if r == 1:
@@ -78,7 +92,9 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def open(self, speed: int = 255) -> bool:
         """Send open command. Speed 255 - normal, 1 - slow"""
-        speed = self.readState()
+		speed = self.readState()
+        self._is_opening = True
+        self._is_closing = False
         return await self._send_multiple_commands(
             [OPEN_KEYS[0], f"{OPEN_KEYS[1]}{speed:02X}00"]
         )
@@ -86,7 +102,9 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def close(self, speed: int = 255) -> bool:
         """Send close command. Speed 255 - normal, 1 - slow"""
-        speed = self.readState()
+		speed = self.readState()
+        self._is_closing = True
+        self._is_opening = False
         return await self._send_multiple_commands(
             [CLOSE_KEYS[0], f"{CLOSE_KEYS[1]}{speed:02X}64"]
         )
@@ -94,13 +112,15 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def stop(self) -> bool:
         """Send stop command to device."""
+        self._is_opening = self._is_closing = False
         return await self._send_multiple_commands(STOP_KEYS)
 
     @update_after_operation
     async def set_position(self, position: int, speed: int = 255) -> bool:
         """Send position command (0-100) to device. Speed 255 - normal, 1 - slow"""
-        speed = self.readState()
+		speed = self.readState()
         position = (100 - position) if self._reverse else position
+        self._update_motion_direction(True, self._get_adv_value("position"), position)
         return await self._send_multiple_commands(
             [
                 f"{POSITION_KEYS[0]}{position:02X}",
@@ -119,6 +139,13 @@ class SwitchbotCurtain(SwitchbotDevice):
             return None
 
         _position = max(min(_data[6], 100), 0)
+        _direction_adjusted_position = (100 - _position) if self._reverse else _position
+        _previous_position = self._get_adv_value("position")
+        _in_motion = bool(_data[5] & 0b01000011)
+        self._update_motion_direction(
+            _in_motion, _previous_position, _direction_adjusted_position
+        )
+
         return {
             "battery": _data[1],
             "firmware": _data[2] / 10.0,
@@ -132,10 +159,24 @@ class SwitchbotCurtain(SwitchbotDevice):
             "solarPanel": bool(_data[5] & 0b00001000),
             "calibration": bool(_data[5] & 0b00000100),
             "calibrated": bool(_data[5] & 0b00000100),
-            "inMotion": bool(_data[5] & 0b01000011),
-            "position": (100 - _position) if self._reverse else _position,
+            "inMotion": _in_motion,
+            "position": _direction_adjusted_position,
             "timers": _data[7],
         }
+
+    def _update_motion_direction(
+        self, in_motion: bool, previous_position: int | None, new_position: int
+    ) -> None:
+        """Update opening/closing status based on movement."""
+        if previous_position is None:
+            return
+        if in_motion is False:
+            self._is_closing = self._is_opening = False
+            return
+
+        if new_position != previous_position:
+            self._is_opening = new_position > previous_position
+            self._is_closing = new_position < previous_position
 
     async def get_extended_info_summary(self) -> dict[str, Any] | None:
         """Get basic info for all devices in chain."""
@@ -221,3 +262,11 @@ class SwitchbotCurtain(SwitchbotDevice):
         """Return True curtain is calibrated."""
         # To get actual light level call update() first.
         return self._get_adv_value("calibration")
+
+    def is_opening(self) -> bool:
+        """Return True if the curtain is opening."""
+        return self._is_opening
+
+    def is_closing(self) -> bool:
+        """Return True if the curtain is closing."""
+        return self._is_closing
