@@ -92,7 +92,7 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def open(self, speed: int = 255) -> bool:
         """Send open command. Speed 255 - normal, 1 - slow"""
-	speed = self.readState()    
+        speed = self.readState()    
         self._is_opening = True
         self._is_closing = False
         return await self._send_multiple_commands(
@@ -102,7 +102,7 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def close(self, speed: int = 255) -> bool:
         """Send close command. Speed 255 - normal, 1 - slow"""
-	speed = self.readState()    
+        speed = self.readState()    
         self._is_closing = True
         self._is_opening = False
         return await self._send_multiple_commands(
@@ -118,7 +118,7 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def set_position(self, position: int, speed: int = 255) -> bool:
         """Send position command (0-100) to device. Speed 255 - normal, 1 - slow"""
-	speed = self.readState()    
+        speed = self.readState()    
         position = (100 - position) if self._reverse else position
         self._update_motion_direction(True, self._get_adv_value("position"), position)
         return await self._send_multiple_commands(
