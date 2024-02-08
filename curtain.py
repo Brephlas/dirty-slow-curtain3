@@ -10,7 +10,7 @@ from .device import REQ_HEADER, SwitchbotDevice, update_after_operation
 
 # Curtain keys
 CURTAIN_COMMAND = "4501"
-
+FILE_SPEED_IDENTIFIER = "/config/custom_components/.slow"
 # For second element of open and close arrs we should add two bytes i.e. ff00
 # First byte [ff] stands for speed (00 or ff - normal, 01 - slow) *
 # * Only for curtains 3. For other models use ff
@@ -80,19 +80,19 @@ class SwitchbotCurtain(SwitchbotDevice):
             result = await self._send_command(key)
             final_result |= self._check_command_result(result, 0, {1})
         return final_result
-	
-	def readState(self):
+
+    def readState(self):
         with open(FILE_SPEED_IDENTIFIER, "r") as fr:
             r = int(fr.read().strip())
             if r == 1:
                 return 1
             else:
                 return 255
-
+    
     @update_after_operation
     async def open(self, speed: int = 255) -> bool:
         """Send open command. Speed 255 - normal, 1 - slow"""
-		speed = self.readState()
+	speed = self.readState()    
         self._is_opening = True
         self._is_closing = False
         return await self._send_multiple_commands(
@@ -102,7 +102,7 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def close(self, speed: int = 255) -> bool:
         """Send close command. Speed 255 - normal, 1 - slow"""
-		speed = self.readState()
+	speed = self.readState()    
         self._is_closing = True
         self._is_opening = False
         return await self._send_multiple_commands(
@@ -118,7 +118,7 @@ class SwitchbotCurtain(SwitchbotDevice):
     @update_after_operation
     async def set_position(self, position: int, speed: int = 255) -> bool:
         """Send position command (0-100) to device. Speed 255 - normal, 1 - slow"""
-		speed = self.readState()
+	speed = self.readState()    
         position = (100 - position) if self._reverse else position
         self._update_motion_direction(True, self._get_adv_value("position"), position)
         return await self._send_multiple_commands(
