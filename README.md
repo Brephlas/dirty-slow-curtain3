@@ -1,3 +1,10 @@
+# Archive notice
+
+There is a better solution as a custom component available, use this instead:
+
+<https://github.com/v6ak/v6-quietdrift> or <https://github.com/Brephlas/quietdrift>
+
+___
 # dirty-slow-curtain3
 *Dirty solution to have both fast and slow speed available for Switchbot Curtain 3*
 
